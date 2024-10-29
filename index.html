@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Filament Recycling Price Calculator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f9;
+        }
+        h2 {
+            color: #333;
+        }
+        label {
+            display: block;
+            margin-top: 10px;
+        }
+        input, button {
+            margin-top: 5px;
+            padding: 8px;
+            width: 100%;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #000;
+        }
+        canvas {
+            margin-top: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #000;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #f0f0f0;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <h2>Filament Recycling Price Calculator</h2>
+
+    <label for="initialQuantity">Initial Quantity of Filament (kg):</label>
+    <input type="number" id="initialQuantity" value="1" step="0.1">
+
+    <label for="initialPrice">Price per Kilogram ($):</label>
+    <input type="number" id="initialPrice" value="10" step="0.1">
+
+    <label for="waste">Waste per Cycle (kg):</label>
+    <input type="number" id="waste" value="0.8" step="0.1">
+
+    <label for="decayRate">Decay Rate (0-1):</label>
+    <input type="number" id="decayRate" value="0.1" step="0.01">
+
+    <button onclick="calculateAveragePrice()">Calculate Average Price</button>
+
+    <div class="result" id="result">
+        <!-- Result will appear here -->
+    </div>
+
+    <canvas id="priceChart"></canvas>
+
+    <script>
+        function calculateAveragePrice() {
+            // Retrieve input values
+            const Q0 = parseFloat(document.getElementById('initialQuantity').value);
+            const P0 = parseFloat(document.getElementById('initialPrice').value);
+            const W = parseFloat(document.getElementById('waste').value);
+            const d = parseFloat(document.getElementById('decayRate').value);
+
+            // Set minimum recyclable filament threshold
+            const minFilament = 0.01;
+            let totalFilamentUsed = 0;
+            let n = 0;
+
+            // Arrays for charting
+            const cycleData = [];
+            const priceData = [];
+            const initialPriceData = [];
+            const priceChanges = [];
+
+            // Calculate maximum cycles without falling below minFilament
+            while (W * Math.pow(1 - d, n) >= minFilament) {
+                const recycledAmount = W * Math.pow(1 - d, n);
+                totalFilamentUsed += recycledAmount;
+
+                // Calculate average price
+                const averagePrice = P0 / totalFilamentUsed;
+
+                // Store data for the chart
+                cycleData.push(n);
+                priceData.push(averagePrice);
+                initialPriceData.push(P0); // Constant initial price
+
+                n++;
+            }
+
+            // Calculate price changes
+            for (let i = 1; i < priceData.length; i++) {
+                priceChanges.push(priceData[i - 1] - priceData[i]);
+            }
+
+            // Find the highest slope
+            const maxSlope = Math.max(...priceChanges);
+
+            // Find the cycle where slope is less than 1/16 of max slope
+            let optimalCycles = 0;
+            for (let i = 0; i < priceChanges.length; i++) {
+                if (priceChanges[i] < maxSlope / 16) {
+                    optimalCycles = i + 1; // +1 to adjust for index
+                    break;
+                }
+            }
+
+            // Calculate the corresponding average price at optimal cycles
+            const optimalAveragePrice = priceData[optimalCycles] || P0;
+
+            // Display the result in a table format
+            document.getElementById('result').innerHTML = `
+                <table>
+                    <tr>
+                        <th>Optimal Recycling Cycles for High Yield</th>
+                        <td>${optimalCycles}</td>
+                    </tr>
+                    <tr>
+                        <th>Corresponding Average Price</th>
+                        <td>$${optimalAveragePrice.toFixed(2)}</td>
+                    </tr>
+                    <tr>
+                        <th>Maximum Recycling Cycles</th>
+                        <td>${n}</td>
+                    </tr>
+                    <tr>
+                        <th>Maximum Total Recycled Filament Used</th>
+                        <td>${totalFilamentUsed.toFixed(2)} kg</td>
+                    </tr>
+                    <tr>
+                        <th>Minimum Average Price per Kilogram After ${n} Cycles </th>
+                        <td>$${(P0 / totalFilamentUsed).toFixed(2)}</td>
+                    </tr>
+                </table>
+            `;
+
+            // Draw the chart
+            drawChart(cycleData, priceData, initialPriceData, P0);
+        }
+
+        function drawChart(cycles, averagePrices, initialPrices, initialPriceValue) {
+            const ctx = document.getElementById('priceChart').getContext('2d');
+            const priceChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: cycles,
+                    datasets: [
+                        {
+                            label: 'Average Price per kg',
+                            data: averagePrices,
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 2,
+                            fill: false
+                        },
+                        {
+                            label: 'Initial Price per kg',
+                            data: initialPrices,
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            borderWidth: 2,
+                            fill: false,
+                            borderDash: [5, 5] // Dashed line
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Number of Recycling Cycles'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Price per kg ($)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+
+</body>
+</html>
